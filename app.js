@@ -168,15 +168,157 @@ const { createApp, ref, reactive, computed, onMounted, watch } = Vue;
 
             // File state (STL + 3MF)
             const modelFile = ref(null);
-            const fileType = ref(''); // 'stl' or '3mf'
+            const fileType = ref(null);
             const isProcessingSTL = ref(false);
+            const isActualGcode = ref(false);
             const processingMessage = ref('Analyzing Geometry...');
-            const stlData = reactive({
-                dimX: 0, dimY: 0, dimZ: 0,
-                volume: 0, surfaceArea: 0,
-                triangles: 0
-            });
-            const threeMFColors = ref([]); // extracted color channels from 3MF
+            const stlData = reactive({ dimX: 0, dimY: 0, dimZ: 0, volume: 0, surfaceArea: 0, triangles: 0 });
+            const threeMFColors = ref([]);
+            
+            const toolpathHandle = ref(null);
+            let rawToolpathMesh = null;
+            let rawToolpathTravLines = null;
+            
+            const clearSlicerPreview = () => {
+                if (scene) {
+                    if (rawToolpathMesh) scene.remove(rawToolpathMesh);
+                    if (rawToolpathTravLines) scene.remove(rawToolpathTravLines);
+                }
+                if (toolpathHandle.value) {
+                    toolpathHandle.value.dispose();
+                    toolpathHandle.value = null;
+                }
+                rawToolpathMesh = null;
+                rawToolpathTravLines = null;
+                
+                if (mesh) {
+                    mesh.visible = true;
+                }
+                // Reset dashboard data back to estimated
+                isActualGcode.value = false;
+                actualData.timeHours = null;
+                actualData.weight = null;
+            };
+            
+            // Add sliceModel function
+            const sliceModel = async () => {
+                if (!modelFile.value || fileType.value === 'gcode') return;
+                
+                isProcessingSTL.value = true;
+                processingMessage.value = "Downloading Slicer Engine...";
+                
+                try {
+                    const { default: createSlicer } = await import('three-slicer');
+                    processingMessage.value = "Initializing Engine...";
+                    const slicer = await createSlicer();
+                    
+                    processingMessage.value = "Slicing Model (This may take a moment)...";
+                    
+                    const arrayBuffer = await modelFile.value.arrayBuffer();
+                    
+                    const params = {
+                        layer_height: printSettings.layerHeight || 0.2,
+                        sparse_infill_density: (printSettings.infill || 15)
+                    };
+                    
+                    if (printSettings.supportType !== 'none') {
+                        params.enable_support = true;
+                        params.support_threshold_angle = 60; // Generate support for angles > 60 deg from horizontal
+                        params.support_on_build_plate_only = false;
+                        params.support_critical_regions_only = false;
+                        
+                        if (printSettings.supportType === 'normal') {
+                            params.support_type = 'normal(auto)';
+                            params.support_style = 'grid';
+                        } else if (printSettings.supportType === 'tree_auto') {
+                            params.support_type = 'tree(auto)';
+                            params.support_style = 'tree_hybrid'; // Fallback to hybrid to ensure branches are generated
+                        } else if (printSettings.supportType === 'normal_snug') {
+                            params.support_type = 'normal(auto)';
+                            params.support_style = 'snug';
+                        }
+                    }
+                    
+                    await new Promise(r => setTimeout(r, 100));
+                    
+                    const result = slicer.slice(arrayBuffer, params);
+                    
+                    if (result.error) {
+                        throw new Error(result.error);
+                    }
+                    
+                    if (result.stats) {
+                        actualData.timeHours = result.stats.time_estimate / 3600;
+                        
+                        const length_mm = result.stats.filament_mm || 0;
+                        const radius = 1.75 / 2;
+                        const volume_cm3 = (Math.PI * radius * radius * length_mm) / 1000;
+                        const density = activeFilament.value ? activeFilament.value.density : 1.24;
+                        actualData.weight = volume_cm3 * density;
+                        
+                        isActualGcode.value = true;
+                    }
+                    
+                    // Render toolpath
+                    if (result.layers && result.layers.length > 0) {
+                        processingMessage.value = "Building 3D Toolpath Preview...";
+                        const { buildSegmentData, makeToolpath, computeColors } = await import('three-slicer/viewer/toolpath');
+                        const THREE = window.THREE || await import('three');
+                        
+                        // Clear previous toolpath
+                        clearSlicerPreview();
+                        
+                        const segmentData = buildSegmentData(result.layers, 0.4);
+                        const handle = makeToolpath(THREE, segmentData);
+                        
+                        // Compute and set colors based on feature type (walls, infill, support, etc)
+                        const colorResult = computeColors(segmentData, 'feature', {});
+                        handle.setColors(colorResult.color);
+                        
+                        // By default layers might be hidden, make sure all are visible!
+                        handle.setLayerRange(0, handle.layerCount - 1);
+                        handle.setTravelVisible(false); // Hide travels so it looks clean
+                        
+                        // Fix orientation and center it exactly where the original mesh was!
+                        // The engine outputs Z-up coordinates, so we rotate -90 on X
+                        handle.mesh.rotation.x = -Math.PI / 2;
+                        handle.travLines.rotation.x = -Math.PI / 2;
+                        
+                        if (segmentData.bbox) {
+                            const min = segmentData.bbox.min;
+                            const max = segmentData.bbox.max;
+                            const cx = (min[0] + max[0]) / 2;
+                            const cy = (min[1] + max[1]) / 2;
+                            // Offset it so the center of the bed matches world origin (0,0,0), and bottom sits at Y=0
+                            handle.mesh.position.set(-cx, -min[2], cy);
+                            handle.travLines.position.set(-cx, -min[2], cy);
+                        }
+                        
+                        // Hide original mesh and add toolpath to scene
+                        if (mesh) mesh.visible = false;
+                        scene.add(handle.mesh);
+                        scene.add(handle.travLines);
+                        
+                        // Keep raw references so scene.remove() works despite Vue Proxy
+                        rawToolpathMesh = handle.mesh;
+                        rawToolpathTravLines = handle.travLines;
+                        
+                        toolpathHandle.value = handle;
+                        
+                        // Ensure camera sees it by resetting
+                        resetCamera();
+                    }
+                    
+                    alert("Slicing Complete! Accuracy updated in dashboard.");
+                    
+                } catch (e) {
+                    console.error("Slicing failed:", e);
+                    alert("Failed to slice model: " + e.message);
+                } finally {
+                    isProcessingSTL.value = false;
+                }
+            };
+            
             let scene, camera, renderer, controls, mesh;
 
             // Filament helpers
@@ -200,7 +342,7 @@ const { createApp, ref, reactive, computed, onMounted, watch } = Vue;
                 infill: 15,
                 layerHeight: 0.2,
                 walls: 2,
-                supports: false
+                supportType: 'none'
             });
 
             const actualData = reactive({
@@ -622,6 +764,7 @@ const { createApp, ref, reactive, computed, onMounted, watch } = Vue;
 
                 modelFile.value = file;
                 isProcessingSTL.value = true;
+                isActualGcode.value = false;
                 actualData.weight = null;
                 actualData.timeHours = null;
                 threeMFColors.value = [];
@@ -765,8 +908,8 @@ const { createApp, ref, reactive, computed, onMounted, watch } = Vue;
                 toggleFilamentSelection, removeActiveFilament, clearActiveFilaments,
                 showPrinterModal, editingPrinter, openPrinterModal, savePrinter, deletePrinter,
                 showFilamentModal, editingFilament, openFilamentModal, saveFilament, deleteFilament,
-                modelFile, fileType, isProcessingSTL, processingMessage,
-                stlData, threeMFColors, handleFileUpload,
+                modelFile, fileType, isProcessingSTL, processingMessage, isActualGcode,
+                stlData, threeMFColors, handleFileUpload, sliceModel, toolpathHandle, clearSlicerPreview,
                 resetCamera, toggleWireframe, printSettings, actualData,
                 breakdownItems, results, formatCurrency, formatTime, generatePDF
             };

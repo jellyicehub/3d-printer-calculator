@@ -179,7 +179,7 @@ const { createApp, ref, reactive, computed, onMounted, watch } = Vue;
             let rawToolpathMesh = null;
             let rawToolpathTravLines = null;
             
-            const clearSlicerPreview = () => {
+            const clearSlicerPreview = (resetData = true) => {
                 if (scene) {
                     if (rawToolpathMesh) scene.remove(rawToolpathMesh);
                     if (rawToolpathTravLines) scene.remove(rawToolpathTravLines);
@@ -194,10 +194,13 @@ const { createApp, ref, reactive, computed, onMounted, watch } = Vue;
                 if (mesh) {
                     mesh.visible = true;
                 }
-                // Reset dashboard data back to estimated
-                isActualGcode.value = false;
-                actualData.timeHours = null;
-                actualData.weight = null;
+                
+                if (resetData) {
+                    // Reset dashboard data back to estimated
+                    isActualGcode.value = false;
+                    actualData.timeHours = null;
+                    actualData.weight = null;
+                }
             };
             
             // Add sliceModel function
@@ -265,8 +268,8 @@ const { createApp, ref, reactive, computed, onMounted, watch } = Vue;
                         const { buildSegmentData, makeToolpath, computeColors } = await import('three-slicer/viewer/toolpath');
                         const THREE = window.THREE || await import('three');
                         
-                        // Clear previous toolpath
-                        clearSlicerPreview();
+                        // Clear previous toolpath without clearing new dashboard data
+                        clearSlicerPreview(false);
                         
                         const segmentData = buildSegmentData(result.layers, 0.4);
                         const handle = makeToolpath(THREE, segmentData);

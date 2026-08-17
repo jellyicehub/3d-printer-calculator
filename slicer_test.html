@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Slicer Test</title>
+</head>
+<body>
+    <h1>Slicer Test</h1>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three-slicer": "https://cdn.jsdelivr.net/npm/three-slicer/+esm"
+        }
+    }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        try {
+            const slicerModule = await import('three-slicer');
+            console.log('Slicer loaded!', slicerModule);
+            document.body.innerHTML += '<p>Slicer loaded successfully!</p>';
+        } catch (e) {
+            console.error('Failed to load slicer', e);
+            document.body.innerHTML += '<p>Error: ' + e.message + '</p>';
+        }
+    </script>
+</body>
+</html>

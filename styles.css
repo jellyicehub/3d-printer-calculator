@@ -1,0 +1,61 @@
+body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; }
+        .dark body { background-color: #0f172a; color: #f8fafc; }
+        #stl-viewer { width: 100%; height: 400px; background: #e2e8f0; border-radius: 0.5rem; overflow: hidden; position: relative;}
+        .dark #stl-viewer { background: #1e293b; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .dark ::-webkit-scrollbar-thumb { background: #475569; }
+        
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+
+        /* File type badges */
+        .badge-3mf {
+            background: linear-gradient(135deg, #7c3aed, #4f46e5);
+            color: white; font-size: 0.6rem; padding: 1px 5px;
+            border-radius: 3px; font-weight: 700; letter-spacing: 0.03em;
+        }
+        .badge-stl {
+            background: linear-gradient(135deg, #0ea5e9, #3b82f6);
+            color: white; font-size: 0.6rem; padding: 1px 5px;
+            border-radius: 3px; font-weight: 700; letter-spacing: 0.03em;
+        }
+        .badge-fdm {
+            background: linear-gradient(135deg, #16a34a, #059669);
+            color: white; font-size: 0.65rem; padding: 1px 6px;
+            border-radius: 3px; font-weight: 700; letter-spacing: 0.03em;
+        }
+        .badge-sla {
+            background: linear-gradient(135deg, #ea580c, #dc2626);
+            color: white; font-size: 0.65rem; padding: 1px 6px;
+            border-radius: 3px; font-weight: 700; letter-spacing: 0.03em;
+        }
+        .badge-resin {
+            background: linear-gradient(135deg, #ea580c, #b45309);
+            color: white; font-size: 0.6rem; padding: 1px 5px;
+            border-radius: 3px; font-weight: 700; letter-spacing: 0.03em;
+        }
+
+        /* Multi-filament color swatch */
+        .filament-swatch {
+            width: 12px; height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            border: 1px solid rgba(0,0,0,0.15);
+            flex-shrink: 0;
+            vertical-align: middle;
+        }
+
+        /* Filament row selected highlight */
+        .filament-row-selected { background: rgba(59,130,246,0.08); }
+        .dark .filament-row-selected { background: rgba(59,130,246,0.15); }
+
+        /* Changelog modal slide-up */
+        @keyframes slideUp {
+            from { transform: translateY(30px); opacity: 0; }
+            to   { transform: translateY(0);    opacity: 1; }
+        }
+        .slide-up { animation: slideUp 0.25s ease; }
